@@ -99,9 +99,9 @@ export default function App() {
   const [adminSessionPassword, setAdminSessionPassword] = useState<string>("");
 
   // Load schedule from backend / local storage fallback
-  const fetchSchedules = async () => {
+  const fetchSchedules = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       if (isGitHubPages) {
         const localData = getLocalSchedules();
         setSchedules(localData);
@@ -122,12 +122,17 @@ export default function App() {
       const localData = getLocalSchedules();
       setSchedules(localData);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchSchedules();
+    // 每 8 秒自動與伺服器同步一次行程，達到實時更新效果
+    const interval = setInterval(() => {
+      fetchSchedules(true);
+    }, 8000);
+    return () => clearInterval(interval);
   }, []);
 
   // Helper to translate text
