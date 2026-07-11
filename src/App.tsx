@@ -27,6 +27,14 @@ import { motion, AnimatePresence } from "motion/react";
 import { Language, ScheduleEntry } from "./types";
 import { translations } from "./translations";
 
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function App() {
   // Global States
   const [lang, setLang] = useState<Language>("zh");
@@ -52,11 +60,15 @@ export default function App() {
   const [adminError, setAdminError] = useState<string>("");
   
   // Admin form states for creating/editing schedule
-  const [adminDate, setAdminDate] = useState<string>("2026-09-01");
+  const [adminDate, setAdminDate] = useState<string>(getTodayStr());
   const [adminCity, setAdminCity] = useState<string>("");
   const [adminStartTime, setAdminStartTime] = useState<string>("14:00");
   const [adminEndTime, setAdminEndTime] = useState<string>("18:00");
   const [adminIsAvailable, setAdminIsAvailable] = useState<boolean>(true);
+
+  // Calendar displayed month/year states
+  const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth() + 1);
 
   // Admin form editing states
   const [editingDate, setEditingDate] = useState<string | null>(null);
@@ -200,7 +212,7 @@ export default function App() {
 
   const handleCancelEdit = () => {
     setEditingDate(null);
-    setAdminDate("2026-09-01");
+    setAdminDate(getTodayStr());
     setAdminCity("");
     setAdminStartTime("14:00");
     setAdminEndTime("18:00");
@@ -300,22 +312,22 @@ export default function App() {
   // Calendar render details
   const activeSchedule = selectedDate ? schedules.find((s) => s.date === selectedDate) : null;
 
-  // Let's create an elegant grid for September 2026 calendar.
-  // 2026 September starts on Tuesday (September 1st).
-  // Total days in September = 30.
-  const getSeptemberGrid = () => {
+  // Let's create an elegant grid for any year and month.
+  const getDynamicGrid = (year: number, month: number) => {
     const days = [];
-    // Blank entries for Sunday and Monday (since Tuesday is 1st)
-    // Sunday=0, Monday=1. Tuesday starts on index 2.
-    // Let's align calendar columns: Sun, Mon, Tue, Wed, Thu, Fri, Sat.
-    // Sunday starts week. Tuesday is index 2, so 2 leading blanks.
-    for (let i = 0; i < 2; i++) {
+    // Sunday starts week. Start offset matches the day of week of the 1st of the month.
+    const firstDay = new Date(year, month - 1, 1);
+    const startDayOfWeek = firstDay.getDay(); 
+    const totalDays = new Date(year, month, 0).getDate();
+
+    for (let i = 0; i < startDayOfWeek; i++) {
       days.push({ blank: true, dateStr: `blank-${i}` });
     }
 
-    for (let d = 1; d <= 30; d++) {
+    for (let d = 1; d <= totalDays; d++) {
       const dayStr = d < 10 ? `0${d}` : `${d}`;
-      const dateStr = `2026-09-${dayStr}`;
+      const monthStr = month < 10 ? `0${month}` : `${month}`;
+      const dateStr = `${year}-${monthStr}-${dayStr}`;
       const scheduleForDay = schedules.find((s) => s.date === dateStr);
       days.push({
         blank: false,
@@ -327,8 +339,28 @@ export default function App() {
     return days;
   };
 
-  const septemberDays = getSeptemberGrid();
+  const calendarDays = getDynamicGrid(calendarYear, calendarMonth);
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  const handlePrevMonth = () => {
+    setCalendarMonth((prev) => {
+      if (prev === 1) {
+        setCalendarYear((y) => y - 1);
+        return 12;
+      }
+      return prev - 1;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setCalendarMonth((prev) => {
+      if (prev === 12) {
+        setCalendarYear((y) => y + 1);
+        return 1;
+      }
+      return prev + 1;
+    });
+  };
 
   return (
     <div className="min-h-screen mint-choco-dots text-choco-900 font-sans flex flex-col selection:bg-mint-200 selection:text-choco-900">
@@ -452,8 +484,7 @@ export default function App() {
                       <input
                         type="date"
                         value={adminDate}
-                        min="2026-09-01"
-                        max="2026-09-30"
+                        min={getTodayStr()}
                         onChange={(e) => setAdminDate(e.target.value)}
                         disabled={!!editingDate}
                         className={`w-full bg-white border-2 border-choco-100 rounded-xl px-3 py-1.5 text-xs outline-none focus:border-choco-500 text-choco-900 ${editingDate ? "opacity-60 bg-choco-50/50 cursor-not-allowed" : ""}`}
@@ -833,6 +864,29 @@ export default function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Calendar Widget */}
                   <div className="lg:col-span-8 bg-white p-5 rounded-3xl shadow-[4px_4px_0px_0px_rgba(74,39,23,0.15)] border-4 border-choco-800 flex flex-col gap-4">
+                    {/* Month / Year selector header */}
+                    <div className="flex items-center justify-between pb-2 border-b-2 border-choco-100">
+                      <span className="font-extrabold text-choco-900 text-sm flex items-center gap-1">
+                        📅 {calendarYear} 年 {calendarMonth} 月
+                      </span>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={handlePrevMonth}
+                          className="p-1 px-3 bg-mint-50 hover:bg-mint-100 border-2 border-choco-800 rounded-xl text-choco-850 text-xs font-black transition-all cursor-pointer hover:scale-105 active:scale-95"
+                          title="上個月"
+                        >
+                          &lt;
+                        </button>
+                        <button
+                          onClick={handleNextMonth}
+                          className="p-1 px-3 bg-mint-50 hover:bg-mint-100 border-2 border-choco-800 rounded-xl text-choco-850 text-xs font-black transition-all cursor-pointer hover:scale-105 active:scale-95"
+                          title="下個月"
+                        >
+                          &gt;
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-7 gap-1 text-center font-extrabold text-xs text-choco-800 bg-mint-100 border-2 border-choco-800/10 py-2 rounded-xl">
                       {weekDays.map((w) => (
                         <div key={w} className="py-1">{w}</div>
@@ -840,7 +894,7 @@ export default function App() {
                     </div>
 
                     <div className="grid grid-cols-7 gap-2">
-                      {septemberDays.map((day, idx) => {
+                      {calendarDays.map((day, idx) => {
                         if (day.blank) {
                           return <div key={day.dateStr} className="aspect-square bg-mint-50/10 rounded-2xl" />;
                         }
