@@ -474,9 +474,20 @@ export default function App() {
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                   {/* Create / Edit Form */}
                   <form onSubmit={handleAdminSaveEntry} className="md:col-span-6 bg-mint-50/70 p-4 rounded-2xl border-2 border-choco-200 flex flex-col gap-3">
-                    <h4 className="font-extrabold text-choco-800 text-sm flex items-center gap-1">
-                      <Plus className="h-4 w-4 text-choco-800" />
-                      {editingDate ? `編輯行程 (${editingDate})` : t("adminAddEntry")}
+                    <h4 className="font-extrabold text-choco-800 text-sm flex items-center justify-between gap-1 flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Plus className="h-4 w-4 text-choco-800" />
+                        {editingDate ? `編輯行程 (${editingDate})` : "新增行程"}
+                      </span>
+                      {editingDate && (
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          className="text-[10px] bg-white text-choco-700 hover:text-choco-950 px-2 py-0.5 border border-choco-300 rounded-lg font-black transition-all cursor-pointer hover:scale-105"
+                        >
+                          切換至「新增行程」
+                        </button>
+                      )}
                     </h4>
                     
                     <div>
