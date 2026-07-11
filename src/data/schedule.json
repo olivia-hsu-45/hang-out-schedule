@@ -1,0 +1,64 @@
+[
+  {
+    "date": "2026-09-01",
+    "city": "台南 Tainan",
+    "startTime": "13:00",
+    "endTime": "17:00",
+    "isAvailable": true
+  },
+  {
+    "date": "2026-09-05",
+    "city": "台北 Taipei",
+    "startTime": "14:00",
+    "endTime": "20:00",
+    "isAvailable": true
+  },
+  {
+    "date": "2026-09-09",
+    "city": "台中 Taichung",
+    "startTime": "11:00",
+    "endTime": "16:00",
+    "isAvailable": true
+  },
+  {
+    "date": "2026-09-12",
+    "city": "高雄 Kaohsiung",
+    "startTime": "10:00",
+    "endTime": "15:00",
+    "isAvailable": true
+  },
+  {
+    "date": "2026-09-15",
+    "city": "台北 Taipei",
+    "startTime": "15:00",
+    "endTime": "19:00",
+    "isAvailable": false,
+    "bookedBy": "Eric",
+    "bookingDetails": {
+      "location": "中山區咖啡廳",
+      "time": "16:00",
+      "activity": "聊聊新專案合作"
+    }
+  },
+  {
+    "date": "2026-09-20",
+    "city": "台南 Tainan",
+    "startTime": "11:00",
+    "endTime": "16:00",
+    "isAvailable": true
+  },
+  {
+    "date": "2026-09-25",
+    "city": "台中 Taichung",
+    "startTime": "12:00",
+    "endTime": "18:00",
+    "isAvailable": true
+  },
+  {
+    "date": "2026-09-28",
+    "city": "台北 Taipei",
+    "startTime": "13:00",
+    "endTime": "17:00",
+    "isAvailable": true
+  }
+]

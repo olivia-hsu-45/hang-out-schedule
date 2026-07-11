@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mint-50: #f0fdf6;
+  --color-mint-100: #e0fbf0;
+  --color-mint-200: #bbf7df;
+  --color-mint-300: #86efc6;
+  --color-mint-400: #34d399;
+  --color-mint-500: #10b981;
+  
+  --color-choco-50: #faf7f2;
+  --color-choco-100: #f5ebe0;
+  --color-choco-200: #e9d0bb;
+  --color-choco-300: #d6ae8f;
+  --color-choco-400: #b67c57;
+  --color-choco-500: #935c39;
+  --color-choco-600: #7b4629;
+  --color-choco-700: #62351f;
+  --color-choco-800: #4a2616;
+  --color-choco-900: #31170c;
+  --color-choco-950: #1a0a05;
+}
+
+.mint-choco-dots {
+  background-color: #f0fdf6; /* Light delicious mint background */
+  background-image: radial-gradient(rgba(147, 92, 57, 0.12) 10%, transparent 10%);
+  background-size: 24px 24px;
+}
