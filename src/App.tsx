@@ -26,6 +26,26 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { Language, ScheduleEntry } from "./types";
 import { translations } from "./translations";
+import defaultScheduleData from "./data/schedule.json";
+
+const isGitHubPages = typeof window !== "undefined" && window.location.hostname.includes("github.io");
+
+const getLocalSchedules = (): ScheduleEntry[] => {
+  const stored = localStorage.getItem("olivia_schedules");
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  localStorage.setItem("olivia_schedules", JSON.stringify(defaultScheduleData));
+  return defaultScheduleData as ScheduleEntry[];
+};
+
+const saveLocalSchedules = (newSchedules: ScheduleEntry[]) => {
+  localStorage.setItem("olivia_schedules", JSON.stringify(newSchedules));
+};
 
 const getTodayStr = () => {
   const d = new Date();
@@ -78,17 +98,29 @@ export default function App() {
   const [adminBookingActivity, setAdminBookingActivity] = useState<string>("");
   const [adminSessionPassword, setAdminSessionPassword] = useState<string>("");
 
-  // Load schedule from backend
+  // Load schedule from backend / local storage fallback
   const fetchSchedules = async () => {
     try {
       setLoading(true);
+      if (isGitHubPages) {
+        const localData = getLocalSchedules();
+        setSchedules(localData);
+        return;
+      }
+
       const res = await fetch("/api/schedule");
       if (res.ok) {
         const data = await res.json();
         setSchedules(data);
+        saveLocalSchedules(data); // Sync
+      } else {
+        const localData = getLocalSchedules();
+        setSchedules(localData);
       }
     } catch (e) {
       console.error("Error fetching schedule:", e);
+      const localData = getLocalSchedules();
+      setSchedules(localData);
     } finally {
       setLoading(false);
     }
@@ -152,6 +184,36 @@ export default function App() {
     if (!selectedDate || !nickname || timeError) return;
     
     setBookingSubmitting(true);
+
+    const performLocalBookingFallback = () => {
+      const localData = getLocalSchedules();
+      const index = localData.findIndex((s) => s.date === selectedDate);
+      if (index !== -1) {
+        localData[index].isAvailable = false;
+        localData[index].bookedBy = nickname;
+        localData[index].bookingDetails = {
+          location: bookingLocation || "未指定地點",
+          time: bookingTime,
+          activity: bookingActivity || "未指定活動",
+        };
+        saveLocalSchedules(localData);
+        setSchedules(localData);
+        setStep(6);
+        return true;
+      }
+      return false;
+    };
+
+    if (isGitHubPages) {
+      if (performLocalBookingFallback()) {
+        setBookingSubmitting(false);
+      } else {
+        alert("Booking failed. Selected date is not available in local data.");
+        setBookingSubmitting(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch("/api/book", {
         method: "POST",
@@ -174,11 +236,15 @@ export default function App() {
         await fetchSchedules();
         setStep(6);
       } else {
-        alert("Booking failed. Please try again.");
+        if (!performLocalBookingFallback()) {
+          alert("Booking failed. Please try again.");
+        }
       }
     } catch (e) {
       console.error(e);
-      alert("Error sending booking!");
+      if (!performLocalBookingFallback()) {
+        alert("Error sending booking!");
+      }
     } finally {
       setBookingSubmitting(false);
     }
@@ -231,27 +297,47 @@ export default function App() {
       return;
     }
 
-    try {
-      const entry: any = {
-        date: adminDate,
-        city: adminCity,
-        startTime: adminStartTime,
-        endTime: adminEndTime,
-        isAvailable: adminIsAvailable,
+    const entry: any = {
+      date: adminDate,
+      city: adminCity,
+      startTime: adminStartTime,
+      endTime: adminEndTime,
+      isAvailable: adminIsAvailable,
+    };
+
+    if (!adminIsAvailable) {
+      entry.bookedBy = adminBookedBy || "手動預約者";
+      entry.bookingDetails = {
+        location: adminBookingLocation || "未指定地點",
+        time: adminBookingTime || adminStartTime,
+        activity: adminBookingActivity || "未指定活動",
       };
+    } else {
+      entry.bookedBy = null;
+      entry.bookingDetails = null;
+    }
 
-      if (!adminIsAvailable) {
-        entry.bookedBy = adminBookedBy || "手動預約者";
-        entry.bookingDetails = {
-          location: adminBookingLocation || "未指定地點",
-          time: adminBookingTime || adminStartTime,
-          activity: adminBookingActivity || "未指定活動",
-        };
+    const performLocalSaveFallback = () => {
+      const localData = getLocalSchedules();
+      const index = localData.findIndex((item: any) => item.date === entry.date);
+      if (index >= 0) {
+        localData[index] = { ...localData[index], ...entry };
       } else {
-        entry.bookedBy = null;
-        entry.bookingDetails = null;
+        localData.push(entry);
       }
+      localData.sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      saveLocalSchedules(localData);
+      setSchedules(localData);
+      alert(editingDate ? "更新成功！(本機儲存)" : "新增成功！(本機儲存)");
+      handleCancelEdit();
+    };
 
+    if (isGitHubPages) {
+      performLocalSaveFallback();
+      return;
+    }
+
+    try {
       const res = await fetch("/api/schedule/update", {
         method: "POST",
         headers: {
@@ -277,17 +363,37 @@ export default function App() {
             errMsg = await res.text();
           } catch (_) {}
         }
-        alert(`Error saving schedule: ${errMsg} (Status: ${res.status})`);
+        
+        // Let's ask if they want to fallback or do it automatically
+        console.warn(`Error saving schedule: ${errMsg} (Status: ${res.status}). Falling back to local storage.`);
+        performLocalSaveFallback();
       }
-    } catch (e: any) {
-      console.error(e);
-      alert(`Network error while saving: ${e?.message || e}`);
+    } catch (err: any) {
+      console.error(err);
+      console.warn("Network error while saving. Falling back to local storage.");
+      performLocalSaveFallback();
     }
   };
 
   // Admin Delete Entry
   const handleAdminDeleteEntry = async (dateToDelete: string) => {
     if (!confirm(`您確定要刪除 ${dateToDelete} 的行程嗎？此動作將會從前台和後台的行程表中完全移除！`)) {
+      return;
+    }
+
+    const performLocalDeleteFallback = () => {
+      let localData = getLocalSchedules();
+      localData = localData.filter((item: any) => item.date !== dateToDelete);
+      saveLocalSchedules(localData);
+      setSchedules(localData);
+      if (editingDate === dateToDelete) {
+        handleCancelEdit();
+      }
+      alert("刪除成功！(本機儲存)");
+    };
+
+    if (isGitHubPages) {
+      performLocalDeleteFallback();
       return;
     }
 
@@ -318,11 +424,13 @@ export default function App() {
             errMsg = await res.text();
           } catch (_) {}
         }
-        alert(`Error deleting: ${errMsg} (Status: ${res.status})`);
+        console.warn(`Error deleting: ${errMsg} (Status: ${res.status}). Falling back to local storage.`);
+        performLocalDeleteFallback();
       }
     } catch (e: any) {
       console.error(e);
-      alert(`Network error while deleting: ${e?.message || e}`);
+      console.warn("Network error while deleting. Falling back to local storage.");
+      performLocalDeleteFallback();
     }
   };
 
@@ -1216,3 +1324,4 @@ export default function App() {
     </div>
   );
 }
+
