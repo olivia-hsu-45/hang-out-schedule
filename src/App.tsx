@@ -24,6 +24,8 @@ import {
   Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { db } from "./firebase";
 import { Language, ScheduleEntry } from "./types";
 import { translations } from "./translations";
 import defaultScheduleData from "./data/schedule.json";
