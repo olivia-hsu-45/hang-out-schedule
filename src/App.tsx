@@ -24,11 +24,11 @@ import {
   Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
-import { db } from "./firebase";
 import { Language, ScheduleEntry } from "./types";
 import { translations } from "./translations";
 import defaultScheduleData from "./data/schedule.json";
+import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 const isGitHubPages = typeof window !== "undefined" && window.location.hostname.includes("github.io");
 
@@ -129,12 +129,24 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchSchedules();
-    // 每 8 秒自動與伺服器同步一次行程，達到實時更新效果
-    const interval = setInterval(() => {
-      fetchSchedules(true);
-    }, 8000);
-    return () => clearInterval(interval);
+    setLoading(true);
+    const q = query(collection(db, "schedules"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data: ScheduleEntry[] = [];
+      snapshot.forEach((doc) => {
+        data.push(doc.data() as ScheduleEntry);
+      });
+      // Sort schedule by date
+      data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      setSchedules(data);
+      saveLocalSchedules(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Firestore real-time subscription error:", error);
+      fetchSchedules(); // Fallback to REST fetching
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Helper to translate text
@@ -154,7 +166,15 @@ export default function App() {
   // Selection of a date
   const handleSelectDate = (dateStr: string) => {
     const entry = schedules.find((s) => s.date === dateStr);
-    if (entry && entry.isAvailable) {
+    if (!entry) {
+      // Allow choosing non-preset dates
+      setSelectedDate(dateStr);
+      setBookingLocation("");
+      setBookingTime("12:00"); // Default starting time
+      setBookingActivity("");
+      setTimeError(false);
+      setStep(5);
+    } else if (entry.isAvailable) {
       setSelectedDate(dateStr);
       setBookingLocation("");
       setBookingTime(entry.startTime); // Default to start time
@@ -203,19 +223,52 @@ export default function App() {
           time: bookingTime,
           activity: bookingActivity || "未指定活動",
         };
-        saveLocalSchedules(localData);
-        setSchedules(localData);
-        setStep(6);
-        return true;
+      } else {
+        localData.push({
+          date: selectedDate,
+          city: bookingLocation || "未指定地點",
+          startTime: bookingTime || "12:00",
+          endTime: bookingTime || "18:00",
+          isAvailable: false,
+          bookedBy: nickname,
+          bookingDetails: {
+            location: bookingLocation || "未指定地點",
+            time: bookingTime || "12:00",
+            activity: bookingActivity || "未指定活動",
+          }
+        });
+        localData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
       }
-      return false;
+      saveLocalSchedules(localData);
+      setSchedules(localData);
+      setStep(6);
+      return true;
     };
 
     if (isGitHubPages) {
-      if (performLocalBookingFallback()) {
-        setBookingSubmitting(false);
-      } else {
-        alert("Booking failed. Selected date is not available in local data.");
+      try {
+        const existing = schedules.find((s) => s.date === selectedDate);
+        const finalEntry = {
+          date: selectedDate,
+          city: existing ? existing.city : (bookingLocation || "未指定地點"),
+          startTime: existing ? existing.startTime : (bookingTime || "12:00"),
+          endTime: existing ? existing.endTime : (bookingTime || "18:00"),
+          isAvailable: false,
+          bookedBy: nickname,
+          bookingDetails: {
+            location: bookingLocation || "未指定地點",
+            time: bookingTime || "12:00",
+            activity: bookingActivity || "未指定活動",
+          }
+        };
+
+        const docRef = doc(db, "schedules", selectedDate);
+        await setDoc(docRef, finalEntry);
+        setStep(6);
+      } catch (err) {
+        console.error("Firestore direct booking write error:", err);
+        performLocalBookingFallback();
+      } finally {
         setBookingSubmitting(false);
       }
       return;
@@ -340,7 +393,15 @@ export default function App() {
     };
 
     if (isGitHubPages) {
-      performLocalSaveFallback();
+      try {
+        const docRef = doc(db, "schedules", entry.date);
+        await setDoc(docRef, entry);
+        alert(editingDate ? "更新成功！" : "新增成功！");
+        handleCancelEdit();
+      } catch (err) {
+        console.error("Firestore direct save error:", err);
+        performLocalSaveFallback();
+      }
       return;
     }
 
@@ -400,7 +461,17 @@ export default function App() {
     };
 
     if (isGitHubPages) {
-      performLocalDeleteFallback();
+      try {
+        const docRef = doc(db, "schedules", dateToDelete);
+        await deleteDoc(docRef);
+        if (editingDate === dateToDelete) {
+          handleCancelEdit();
+        }
+        alert("刪除成功！");
+      } catch (err) {
+        console.error("Firestore direct delete error:", err);
+        performLocalDeleteFallback();
+      }
       return;
     }
 
@@ -442,7 +513,15 @@ export default function App() {
   };
 
   // Calendar render details
-  const activeSchedule = selectedDate ? schedules.find((s) => s.date === selectedDate) : null;
+  const activeSchedule = selectedDate
+    ? (schedules.find((s) => s.date === selectedDate) || {
+        date: selectedDate,
+        city: "約定地點",
+        startTime: "12:00",
+        endTime: "18:00",
+        isAvailable: true,
+      })
+    : null;
 
   // Let's create an elegant grid for any year and month.
   const getDynamicGrid = (year: number, month: number) => {
@@ -1043,7 +1122,7 @@ export default function App() {
                         }
 
                         const s = day.schedule;
-                        const isSelectable = s && s.isAvailable;
+                        const isSelectable = !s || (s && s.isAvailable);
 
                         return (
                           <button
@@ -1051,18 +1130,18 @@ export default function App() {
                             onClick={() => isSelectable && handleSelectDate(day.dateStr)}
                             disabled={!isSelectable}
                             className={`aspect-square rounded-2xl p-1.5 flex flex-col justify-between text-left border-2 relative transition-all group overflow-hidden ${
-                              isSelectable
+                              s && s.isAvailable
                                 ? "bg-white hover:bg-mint-100/50 border-choco-100 hover:border-choco-800 shadow-xs hover:shadow-sm cursor-pointer hover:scale-[1.03]"
-                                : s
-                                ? "bg-choco-50 border-choco-100 opacity-60 cursor-not-allowed"
-                                : "bg-mint-50/50 border-choco-100/10 opacity-30 cursor-not-allowed"
+                                : !s
+                                ? "bg-white hover:bg-mint-50/50 border-choco-100/40 hover:border-choco-800 shadow-xs hover:shadow-sm cursor-pointer hover:scale-[1.03]"
+                                : "bg-choco-50 border-choco-100 opacity-60 cursor-not-allowed"
                             }`}
                           >
                             <span className={`text-xs font-black ${s ? "text-choco-900" : "text-choco-400"}`}>
                               {day.dayNum}
                             </span>
 
-                            {s && (
+                            {s ? (
                               <div className="w-full flex flex-col gap-0.5 mt-auto">
                                 <span className={`text-[9px] font-black truncate leading-none px-1 py-0.5 rounded ${
                                   s.isAvailable 
@@ -1073,6 +1152,12 @@ export default function App() {
                                 </span>
                                 <span className="text-[7px] text-choco-600 truncate font-mono tracking-tighter block font-bold">
                                   {s.startTime}-{s.endTime}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="w-full flex flex-col gap-0.5 mt-auto opacity-40 group-hover:opacity-100 transition-opacity">
+                                <span className="text-[8px] font-extrabold text-teal-600 text-center py-0.5 border border-dashed border-teal-200 rounded bg-teal-50/30">
+                                  預約出門 +
                                 </span>
                               </div>
                             )}
