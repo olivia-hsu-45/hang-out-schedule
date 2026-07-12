@@ -30,8 +30,7 @@ import defaultScheduleData from "./data/schedule.json";
 import { collection, onSnapshot, query, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
-const isGitHubPages = typeof window !== "undefined" && window.location.hostname.includes("github.io");
-
+const isGitHubPages = true;
 const getLocalSchedules = (): ScheduleEntry[] => {
   const stored = localStorage.getItem("olivia_schedules");
   if (stored) {
